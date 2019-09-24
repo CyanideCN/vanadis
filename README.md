@@ -1,8 +1,11 @@
 # Vanadis
 
-A Simple tool to manipulate matplotlib colormaps easily.
+A simple tool to manipulate matplotlib colormaps easily.
 
 ## Basic Usage
+
+Currently, `vanadis` can concatenate and slice colormaps. And it is compatible with
+matplotlib built-in colormaps.
 
 ```python
 from vanadis.colormap import Colormap
@@ -26,3 +29,7 @@ ax = plt.gca()
 ColorbarBase(ax, cmap=new_cmap, orientation='horizontal')
 plt.show()
 ```
+
+It should look like this:
+
+![sample picture](https://raw.githubusercontent.com/CyanideCN/vanadis/master/picture/1.png)
