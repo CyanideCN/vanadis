@@ -1,9 +1,13 @@
 # coding = utf-8
 
+import itertools
+
 import numpy as np
 import matplotlib.colors as mcolor
 import matplotlib.pyplot as plt
 from matplotlib.colorbar import ColorbarBase
+
+_COLOR_SPACING = 1e-4
 
 def normalize(arr):
     arr = np.array(arr)
@@ -28,7 +32,7 @@ class Segment(dict):
         self._green = data['green']
         self._blue = data['blue']
         super().__init__(data)
-    
+
     @property
     def red_value(self):
         return [seg[0] for seg in self._red]
@@ -58,6 +62,12 @@ class Segment(dict):
         cdict = {'red':red_data, 'green':green_data, 'blue':blue_data}
         return cls(cdict)
 
+    @classmethod
+    def from_value_color(cls, r_value, g_value, b_value, r_data, g_data, b_data):
+        return cls.from_list(merge_tup(r_value, r_data),
+                             merge_tup(g_value, g_data),
+                             merge_tup(b_value, b_data))
+
 class Colormap(mcolor.LinearSegmentedColormap):
     def __init__(self, name=None, segmentdata=None, N=256, gamma=1.0, cmap=None):
         if cmap:
@@ -67,9 +77,24 @@ class Colormap(mcolor.LinearSegmentedColormap):
                 self._seg = Segment(cmap._segmentdata)
                 self._N = cmap.N
                 self._gamma = cmap._gamma
+            if isinstance(cmap, mcolor.ListedColormap):
+                carr = mcolor.to_rgba_array(cmap.colors)
+                arr = np.repeat(carr, 2, axis=0)
+                # Default range is 1
+                idx = np.repeat(np.linspace(0, 1, cmap.N), 2)
+                offset = np.array(list(itertools.islice(itertools.cycle([_COLOR_SPACING, 0]),
+                                  cmap.N * 2)))
+                true_index = normalize((idx - offset)[1:])
+                r_tup = [(i[0], i[0]) for i in arr][1:]
+                g_tup = [(i[1], i[1]) for i in arr][1:]
+                b_tup = [(i[2], i[2]) for i in arr][1:]
+                self._name = cmap.name
+                self._seg = Segment.from_value_color(true_index, true_index, true_index,
+                                                     r_tup, g_tup, b_tup)
+                self._N = cmap.N
+                self._gamma = 1
         else:
             self._name = name
-            # Need to parse segment data
             self._seg = Segment(segmentdata)
             self._N = N
             self._gamma = gamma
@@ -77,7 +102,7 @@ class Colormap(mcolor.LinearSegmentedColormap):
 
     def __getitem__(self, n):
         if len(set([len(i) for i in self._seg.values()])) != 1:
-            raise IndexError('Number of colors for each channel is not the same')
+            raise IndexError('Number of colors for each channel should be the same')
         if isinstance(n, slice):
             r = merge_tup(normalize(self._seg.red_value[n]), self._seg.red_colors[n])
             g = merge_tup(normalize(self._seg.green_value[n]), self._seg.green_colors[n])
@@ -85,21 +110,32 @@ class Colormap(mcolor.LinearSegmentedColormap):
             new_seg = Segment.from_list(r, g, b)
             return Colormap(self._name + '_seg', new_seg)
 
+    @staticmethod
+    def _merge_cmap(cmap_1, cmap_2):
+        new_rv = concat_index(cmap_1._seg.red_value, cmap_2._seg.red_value)
+        new_gv = concat_index(cmap_1._seg.green_value, cmap_2._seg.green_value)
+        new_bv = concat_index(cmap_1._seg.blue_value, cmap_2._seg.blue_value)
+        new_rcol = cmap_1._seg.red_colors + cmap_2._seg.red_colors
+        new_gcol = cmap_1._seg.green_colors + cmap_2._seg.green_colors
+        new_bcol = cmap_1._seg.blue_colors + cmap_2._seg.blue_colors
+        seg = Segment.from_value_color(new_rv, new_gv, new_bv, new_rcol, new_gcol, new_bcol)
+        return Colormap(cmap_1._name + cmap_2._name, seg)
+
     def __add__(self, one):
-        if isinstance(one, mcolor.LinearSegmentedColormap):
+        if isinstance(one, mcolor.Colormap):
             one = Colormap(cmap=one)
         if not isinstance(one, type(self)):
             raise NotImplementedError()
-        new_rv = concat_index(self._seg.red_value, one._seg.red_value)
-        new_gv = concat_index(self._seg.green_value, one._seg.green_value)
-        new_bv = concat_index(self._seg.blue_value, one._seg.blue_value)
-        new_rcol = self._seg.red_colors + one._seg.red_colors
-        new_gcol = self._seg.green_colors + one._seg.green_colors
-        new_bcol = self._seg.blue_colors + one._seg.blue_colors
-        seg = Segment.from_list(merge_tup(new_rv, new_rcol),
-                                merge_tup(new_gv, new_gcol),
-                                merge_tup(new_bv, new_bcol))
-        return Colormap(self._name + one._name, seg)
+        new_cmap = self._merge_cmap(self, one)
+        return new_cmap
+
+    def __radd__(self, one):
+        if isinstance(one, mcolor.Colormap):
+            one = Colormap(cmap=one)
+        if not isinstance(one, type(self)):
+            raise NotImplementedError()
+        new_cmap = self._merge_cmap(one, self)
+        return new_cmap  
 
     def set_value(self, value):
         pass
@@ -107,22 +143,8 @@ class Colormap(mcolor.LinearSegmentedColormap):
     def set_color(self, color):
         pass
 
-def show_cmap(cmap):
-    plt.figure(1, figsize=(11, 2))
-    ax = plt.gca()
-    ColorbarBase(ax, cmap=cmap, orientation='horizontal')
-    plt.show()
-
-if __name__ == '__main__':
-    cdict = {'red':[(0.0, 0.0, 0.0),
-                    (0.5, 1.0, 1.0),
-                    (1.0, 1.0, 1.0)],
-            'green':[(0.0, 0.0, 0.0),
-                     (0.5, 1.0, 1.0),
-                     (1.0, 1.0, 1.0)],
-            'blue':[(0.0, 0.0, 0.0),
-                    (0.5, 0.0, 0.0),
-                    (1.0, 1.0, 1.0)]}
-    cmap = Colormap('a', cdict)
-    hsv = plt.get_cmap('hsv')
-    show_cmap(cmap + hsv)
+    def show(self):
+        plt.figure(1, figsize=(11, 2))
+        ax = plt.gca()
+        ColorbarBase(ax, cmap=self, orientation='horizontal')
+        plt.show()
