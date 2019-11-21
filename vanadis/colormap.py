@@ -163,3 +163,6 @@ class Colormap(mcolor.LinearSegmentedColormap):
 
     def as_mpl_cmap(self):
         return mcolor.LinearSegmentedColormap(self._name, self._seg, self._N, self._gamma)
+    
+    def set_uniform(self):
+        return self.set_value(np.linspace(0, 1, len(self._seg._red)))
