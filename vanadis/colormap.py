@@ -76,7 +76,10 @@ class Colormap(mcolor.LinearSegmentedColormap):
         if cmap:
             self._init_from_cmap(cmap)
         else:
-            self._name = name
+            if not name:
+                self._name = 'cmap'
+            else:
+                self._name = name
             self._seg = Segment(segmentdata)
             self._N = N
             self._gamma = gamma
@@ -141,7 +144,7 @@ class Colormap(mcolor.LinearSegmentedColormap):
         if not isinstance(one, type(self)):
             raise NotImplementedError()
         new_cmap = self._merge_cmap(one, self)
-        return new_cmap  
+        return new_cmap
 
     def set_value(self, value):
         value = normalize(value)
@@ -155,6 +158,9 @@ class Colormap(mcolor.LinearSegmentedColormap):
     def set_color(self, color):
         pass
 
+    def set_name(self, name):
+        self._name = name
+
     def show(self):
         plt.figure(1, figsize=(11, 2))
         ax = plt.gca()
@@ -163,6 +169,6 @@ class Colormap(mcolor.LinearSegmentedColormap):
 
     def as_mpl_cmap(self):
         return mcolor.LinearSegmentedColormap(self._name, self._seg, self._N, self._gamma)
-    
+
     def set_uniform(self):
         return self.set_value(np.linspace(0, 1, len(self._seg._red)))
